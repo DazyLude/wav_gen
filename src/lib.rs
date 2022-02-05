@@ -9,6 +9,7 @@ use std::io::Write;
 pub struct WavConfig<T: WaveData> {
     file_name: String,
     chunk_size: u32,
+    encoding: u16,
     num_channels: u16,
     sample_rate: u32,
     byte_rate: u32,
@@ -22,6 +23,7 @@ impl<T: WaveData> WavConfig<T> {
     pub fn new(file_name: String, num_channels: u16, sample_rate: u32, sound: T) -> WavConfig<T> {
         let subchunk_2_size: u32 = (sound.len() as u32) * sound.get_bits_per_sample() as u32 / 8;
         let bits_per_sample: u16 = sound.get_bits_per_sample();
+        let encoding: u16 = sound.get_encoding();
 
         let chunk_size: u32 = subchunk_2_size + 36;
         let byte_rate: u32 = sample_rate * bits_per_sample as u32 * num_channels as u32 / 8;
@@ -30,6 +32,7 @@ impl<T: WaveData> WavConfig<T> {
         WavConfig {
             file_name,
             chunk_size,
+            encoding,
             num_channels,
             sample_rate,
             byte_rate,
@@ -63,7 +66,7 @@ impl<T: WaveData> WavConfig<T> {
             i += 1;
         }
         // encoding: PCM (1) or smth else. Data can be stored with floats and then it's not PCM
-        for byte in 0x00_01_i16.to_le_bytes() {
+        for byte in self.encoding.to_le_bytes() {
             header[i] = byte;
             i += 1;
         }
@@ -146,7 +149,7 @@ pub fn gen_wav_file<T: WaveData>(cfg: WavConfig<T>) {
 
 pub fn gen_sine_wave(freq: f64, length: f64) -> Vec<(f64, f64)> {
     let mut target_vector: Vec<(f64, f64)> = Vec::new();
-    let times = math::linspace_from_n(0.0, length, 10000);
+    let times = math::linspace_from_n(0.0, length, length as i64 * 10000);
     for i in times {
         target_vector.push((i, (freq * i * 2. * std::f64::consts::PI).sin()));
     }

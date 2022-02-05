@@ -10,12 +10,6 @@ pub fn linerp((x1, y1): (f64, f64), (x2, y2): (f64, f64), x3: f64) -> f64 {
 pub fn linerp_vector_from_freq(xy_old: Vec<(f64, f64)>, desired_freq: f64) -> Vec<f64> {
     let (x, y): (Vec<f64>, Vec<f64>) = xy_old.into_iter().unzip();
     let desired_x = linspace(x[0], *x.last().unwrap_or(&0.), desired_freq);
-    assert!(
-        x.last() > desired_x.last(),
-        "tried linearly interpolate outside of given bounds: x_max given = {}, x_max desired = {}",
-        x.last().unwrap_or(&0.),
-        desired_x.last().unwrap_or(&0.)
-    );
 
     let mut i = 0;
     let mut k = 0;
