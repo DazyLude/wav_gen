@@ -38,7 +38,7 @@ impl WaveData for Vec<u8> {
                 f_val.abs() <= 1.,
                 "wave amplitude is not within [-1, 1] range"
             );
-            self.push(((f_val + 1.) * 128.) as u8);
+            self.push(((f_val + 1.) * 127.) as u8);
         }
     }
 }

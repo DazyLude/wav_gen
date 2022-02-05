@@ -1,3 +1,4 @@
+pub mod instruments;
 mod math;
 pub mod wave_data;
 
@@ -145,14 +146,4 @@ pub fn gen_wav_file<T: WaveData>(cfg: WavConfig<T>) {
         }
         Err(e) => panic!("Could not write data to the file: {}", e),
     }
-}
-
-pub fn gen_sine_wave(freq: f64, length: f64) -> Vec<(f64, f64)> {
-    let mut target_vector: Vec<(f64, f64)> = Vec::new();
-    let times = math::linspace_from_n(0.0, length, length as i64 * 10000);
-    for i in times {
-        target_vector.push((i, (freq * i * 2. * std::f64::consts::PI).sin()));
-    }
-    println!("Generated sine wave");
-    target_vector
 }
