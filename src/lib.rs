@@ -4,7 +4,6 @@ pub mod wave_data;
 use crate::wave_data::WaveData;
 use std::ffi::OsString;
 use std::fs;
-use std::io::Seek;
 use std::io::Write;
 
 pub struct WavConfig<T: WaveData> {
@@ -21,8 +20,7 @@ pub struct WavConfig<T: WaveData> {
 
 impl<T: WaveData> WavConfig<T> {
     pub fn new(file_name: String, num_channels: u16, sample_rate: u32, sound: T) -> WavConfig<T> {
-        let subchunk_2_size: u32 =
-            (sound.len() as u32 - 1) * sound.get_bits_per_sample() as u32 / 8;
+        let subchunk_2_size: u32 = (sound.len() as u32) * sound.get_bits_per_sample() as u32 / 8;
         let bits_per_sample: u16 = sound.get_bits_per_sample();
 
         let chunk_size: u32 = subchunk_2_size + 36;
@@ -41,6 +39,73 @@ impl<T: WaveData> WavConfig<T> {
             sound,
         }
     }
+
+    pub fn assemble_header(&self) -> [u8; 44] {
+        let mut header: [u8; 44] = [0; 44];
+        let mut i = 0;
+
+        // "RIFF"
+        for byte in 0x52_49_46_46_i32.to_be_bytes() {
+            header[i] = byte;
+            i += 1;
+        }
+        // size of the file - 8
+        for byte in self.chunk_size.to_le_bytes() {
+            header[i] = byte;
+            i += 1;
+        }
+        // "WAVE" (be) + "fmt " (be) + size of format subchunk (le)
+
+        for byte in [
+            0x57, 0x41, 0x56, 0x45, 0x66, 0x6d, 0x74, 0x20, 0x10, 0x00, 0x00, 0x00,
+        ] {
+            header[i] = byte;
+            i += 1;
+        }
+        // encoding: PCM (1) or smth else. Data can be stored with floats and then it's not PCM
+        for byte in 0x00_01_i16.to_le_bytes() {
+            header[i] = byte;
+            i += 1;
+        }
+        // number of channels, mono or stereo or smth else
+        for byte in self.num_channels.to_le_bytes() {
+            header[i] = byte;
+            i += 1;
+        }
+        // sample rate - samples per second
+        for byte in self.sample_rate.to_le_bytes() {
+            header[i] = byte;
+            i += 1;
+        }
+        // byte rate - average bytes per second
+        for byte in self.byte_rate.to_le_bytes() {
+            header[i] = byte;
+            i += 1;
+        }
+        // block align - how many bytes per sample for all channels
+        for byte in self.block_align.to_le_bytes() {
+            header[i] = byte;
+            i += 1;
+        }
+        // block align - how many bits per sample for one channel
+        for byte in self.bits_per_sample.to_le_bytes() {
+            header[i] = byte;
+            i += 1;
+            // "DATA"
+        }
+        for byte in 0x64_61_74_61_i32.to_be_bytes() {
+            header[i] = byte;
+            i += 1;
+        }
+        // size of the data
+        for byte in self.subchunk_2_size.to_le_bytes() {
+            header[i] = byte;
+            i += 1;
+        }
+        // End of header
+
+        header
+    }
 }
 
 pub fn gen_wav_file<T: WaveData>(cfg: WavConfig<T>) {
@@ -51,34 +116,37 @@ pub fn gen_wav_file<T: WaveData>(cfg: WavConfig<T>) {
         .open(OsString::from(&cfg.file_name))
     {
         Ok(result) => result,
-        Err(e) => panic!("{}", e),
+        Err(e) => panic!("Could not open the file: {}", e),
     };
 
-    file.write(&0x52_49_46_46_i32.to_be_bytes()).unwrap_or(0); // "RIFF"
-    file.write(&cfg.chunk_size.to_le_bytes()).unwrap_or(0);
-    file.write(&0x57_41_56_45_i32.to_be_bytes()).unwrap_or(0); // "WAVE"
-    file.write(&0x66_6d_74_20_i32.to_be_bytes()).unwrap_or(0); // "fmt "
-    file.write(&0x00_00_00_10_i32.to_le_bytes()).unwrap_or(0); // 16
-    file.write(&0x00_01_i16.to_le_bytes()).unwrap_or(0); // PCM
-    file.write(&cfg.num_channels.to_le_bytes()).unwrap_or(0);
-    file.write(&cfg.sample_rate.to_le_bytes()).unwrap_or(0);
-    file.write(&cfg.byte_rate.to_le_bytes()).unwrap_or(0);
-    file.write(&cfg.block_align.to_le_bytes()).unwrap_or(0);
-    file.write(&cfg.bits_per_sample.to_le_bytes()).unwrap_or(0);
-    file.write(&0x64_61_74_61_i32.to_be_bytes()).unwrap_or(0); // "0 Data"
-    file.write(&cfg.subchunk_2_size.to_le_bytes()).unwrap_or(0);
-    file.write(&cfg.sound.to_byte_slice()).unwrap_or(0);
+    match file.write(&cfg.assemble_header()) {
+        Ok(result) => {
+            if result != 44 {
+                panic!(
+                    "Was expecting to write 44 bytes to the file, wrote {}",
+                    result
+                );
+            }
+        }
+        Err(e) => panic!("Could not write header to the file: {}", e),
+    }
 
-    let size = file.metadata().unwrap().len();
-    file.seek(std::io::SeekFrom::Start(4)).unwrap();
-    file.write(&(size as u32 - 8).to_le_bytes()).unwrap_or(0);
-    file.seek(std::io::SeekFrom::Start(40)).unwrap();
-    file.write(&(size as u32 - 44).to_le_bytes()).unwrap_or(0);
+    match file.write(&cfg.sound.to_byte_slice()) {
+        Ok(result) => {
+            if result != cfg.subchunk_2_size as usize {
+                panic!(
+                    "Was epecting to write {} bytes to the file, wrote {}",
+                    cfg.subchunk_2_size, result
+                );
+            }
+        }
+        Err(e) => panic!("Could not write data to the file: {}", e),
+    }
 }
 
 pub fn gen_sine_wave(freq: f64, length: f64) -> Vec<(f64, f64)> {
     let mut target_vector: Vec<(f64, f64)> = Vec::new();
-    let times = math::linspace2(0.0, length, 10000);
+    let times = math::linspace_from_n(0.0, length, 10000);
     for i in times {
         target_vector.push((i, (freq * i * 2. * std::f64::consts::PI).sin()));
     }
