@@ -2,7 +2,7 @@
 pub fn linerp((x1, y1): (f64, f64), (x2, y2): (f64, f64), x3: f64) -> f64 {
     assert!(
         x2 != x1,
-        "tried to interpolate between x1 = {x1} and x2 = {x2}"
+        "Tried to interpolate between x1 = {x1} and x2 = {x2}"
     );
     y1 + (x3 - x1) * (y2 - y1) / (x2 - x1)
 }

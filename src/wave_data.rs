@@ -8,7 +8,7 @@ pub trait WaveData {
     fn len(&self) -> usize;
 
     fn to_byte_slice(&self) -> Vec<u8>;
-    fn generate_from_wave(&mut self, wave: Vec<(f64, f64)>, sample_rate: u32);
+    fn generate_from_wave(&mut self, wave: &Vec<(f64, f64)>, sample_rate: u32);
 }
 
 impl WaveData for Vec<u8> {
@@ -31,8 +31,8 @@ impl WaveData for Vec<u8> {
     fn len(&self) -> usize {
         self.len()
     }
-    fn generate_from_wave(&mut self, wave: Vec<(f64, f64)>, sample_rate: u32) {
-        let data_f64 = linerp_vector_from_freq(wave, sample_rate as f64);
+    fn generate_from_wave(&mut self, wave: &Vec<(f64, f64)>, sample_rate: u32) {
+        let data_f64 = linerp_vector_from_freq(wave.to_vec(), sample_rate as f64);
         for f_val in data_f64 {
             assert!(
                 f_val.abs() <= 1.,
@@ -65,8 +65,8 @@ impl WaveData for Vec<i16> {
         }
         vector
     }
-    fn generate_from_wave(&mut self, wave: Vec<(f64, f64)>, sample_rate: u32) {
-        let data_f64 = linerp_vector_from_freq(wave, sample_rate as f64);
+    fn generate_from_wave(&mut self, wave: &Vec<(f64, f64)>, sample_rate: u32) {
+        let data_f64 = linerp_vector_from_freq(wave.to_vec(), sample_rate as f64);
         for f_val in data_f64 {
             assert!(
                 f_val.abs() <= 1.,
@@ -99,8 +99,8 @@ impl WaveData for Vec<f32> {
         }
         vector
     }
-    fn generate_from_wave(&mut self, wave: Vec<(f64, f64)>, sample_rate: u32) {
-        let data_f64 = linerp_vector_from_freq(wave, sample_rate as f64);
+    fn generate_from_wave(&mut self, wave: &Vec<(f64, f64)>, sample_rate: u32) {
+        let data_f64 = linerp_vector_from_freq(wave.to_vec(), sample_rate as f64);
         for f_val in data_f64 {
             assert!(
                 f_val.abs() <= 1.,

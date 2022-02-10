@@ -1,6 +1,11 @@
-pub mod instruments;
 mod math;
+
 pub mod wave_data;
+
+// notesheet should be passed to harmonics, then they give the note structs
+// then the orchestrator dispenses note-vectors to the instruments
+// and then they return sound data, which is passed to WaveData, which generates .wav file
+pub mod instruments;
 
 use crate::wave_data::WaveData;
 use std::ffi::OsString;

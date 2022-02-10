@@ -1,5 +1,8 @@
 pub const A440: f64 = 440.;
 
+// Harmonics turn notes that a person can easily percieve,
+// such as C-sharp (kappa) or D-flats into a collection of frequencies and other data
+
 pub trait Harmonics {
     fn get_note(&self, note: NoteNote) -> Note;
     // fn get_note(&self, freq: f64) -> NoteNote;
