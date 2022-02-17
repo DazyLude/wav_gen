@@ -4,29 +4,38 @@ pub fn linerp((x1, y1): (f64, f64), (x2, y2): (f64, f64), x3: f64) -> f64 {
         x2 != x1,
         "Tried to interpolate between x1 = {x1} and x2 = {x2}"
     );
+    if x3 > x2 || x3 < x1 {
+        println!("Tried to interpolate outside [{x1}, {x2}], x3 = {x3}");
+    }
     y1 + (x3 - x1) * (y2 - y1) / (x2 - x1)
 }
-// linearly interpolates vector of points for desired values spaced with desired frequency and returns desired_y
-pub fn linerp_vector_from_freq(xy_old: Vec<(f64, f64)>, desired_freq: f64) -> Vec<f64> {
-    let (x, y): (Vec<f64>, Vec<f64>) = xy_old.into_iter().unzip();
-    let desired_x = linspace(x[0], *x.last().unwrap_or(&0.), desired_freq);
-
-    let mut i = 0;
-    let mut k = 0;
-    let mut desired_y: Vec<f64> = Vec::with_capacity(desired_x.len());
-
-    while i < desired_x.len() && k < (x.len()) {
-        if desired_x[i] > x[k + 1] {
-            k = k + 1;
+pub fn linerp_from_sample_rate(
+    old_y: Vec<f64>,
+    old_sample_rate: u32,
+    new_sample_rate: u32,
+) -> Vec<f64> {
+    assert!(
+        old_sample_rate <= new_sample_rate,
+        "linerp_from_sample_rate works only if old_sample_rate ({old_sample_rate})
+         is less or equal than new_sample_rate ({new_sample_rate})"
+    );
+    let mut new_y: Vec<f64> = Vec::new();
+    let mut k: i64 = 0;
+    for i in 1..old_y.len() {
+        while (k * (old_sample_rate as i64)) < (i as i64 * (new_sample_rate as i64)) {
+            new_y.push(linerp(
+                ((i - 1) as f64 / old_sample_rate as f64, old_y[i - 1]),
+                (i as f64 / old_sample_rate as f64, old_y[i]),
+                k as f64 / new_sample_rate as f64,
+            ));
+            k += 1;
         }
-        desired_y.push(linerp((x[k], y[k]), (x[k + 1], y[k + 1]), desired_x[i]));
-        i += 1;
     }
-    desired_y
+    new_y
 }
 
-// creates a vector that contains points, spaced evenly with interval 1 / points per unit
-pub fn linspace(x0: f64, x1: f64, points_per_unit: f64) -> Vec<f64> {
+// creates a vector that contains points spaced evenly with interval 1 / points per unit
+pub fn _linspace(x0: f64, x1: f64, points_per_unit: f64) -> Vec<f64> {
     assert!(
         x0 < x1,
         "Tried to create a linspace with x0 = {x0} and x1 = {x1}"

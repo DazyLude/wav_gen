@@ -1,4 +1,5 @@
-use crate::math::linerp_vector_from_freq;
+use crate::math::linerp_from_sample_rate;
+use crate::track::DESIRED_SAMPLE_RATE;
 
 pub trait WaveData {
     //getters
@@ -8,7 +9,17 @@ pub trait WaveData {
     fn len(&self) -> usize;
 
     fn to_byte_slice(&self) -> Vec<u8>;
-    fn generate_from_wave(&mut self, wave: &Vec<(f64, f64)>, sample_rate: u32);
+    fn push_sample_data_from_f64(&mut self, data: f64);
+    fn generate_from_wave(&mut self, wave: &Vec<f64>, sample_rate: u32) {
+        let data_f64 = linerp_from_sample_rate(wave.to_vec(), DESIRED_SAMPLE_RATE, sample_rate);
+        for f_val in data_f64 {
+            assert!(
+                f_val.abs() <= 1.,
+                "wave amplitude is not within [-1, 1] range: {f_val}"
+            );
+            self.push_sample_data_from_f64(f_val);
+        }
+    }
 }
 
 impl WaveData for Vec<u8> {
@@ -31,15 +42,8 @@ impl WaveData for Vec<u8> {
     fn len(&self) -> usize {
         self.len()
     }
-    fn generate_from_wave(&mut self, wave: &Vec<(f64, f64)>, sample_rate: u32) {
-        let data_f64 = linerp_vector_from_freq(wave.to_vec(), sample_rate as f64);
-        for f_val in data_f64 {
-            assert!(
-                f_val.abs() <= 1.,
-                "wave amplitude is not within [-1, 1] range"
-            );
-            self.push(((f_val + 1.) * 127.) as u8);
-        }
+    fn push_sample_data_from_f64(&mut self, data: f64) {
+        self.push(((data + 1.) * 127.) as u8);
     }
 }
 
@@ -65,15 +69,8 @@ impl WaveData for Vec<i16> {
         }
         vector
     }
-    fn generate_from_wave(&mut self, wave: &Vec<(f64, f64)>, sample_rate: u32) {
-        let data_f64 = linerp_vector_from_freq(wave.to_vec(), sample_rate as f64);
-        for f_val in data_f64 {
-            assert!(
-                f_val.abs() <= 1.,
-                "wave amplitude is not within [-1, 1] range"
-            );
-            self.push((f_val * 32760.) as i16);
-        }
+    fn push_sample_data_from_f64(&mut self, data: f64) {
+        self.push((data * 32760.) as i16);
     }
 }
 
@@ -99,14 +96,7 @@ impl WaveData for Vec<f32> {
         }
         vector
     }
-    fn generate_from_wave(&mut self, wave: &Vec<(f64, f64)>, sample_rate: u32) {
-        let data_f64 = linerp_vector_from_freq(wave.to_vec(), sample_rate as f64);
-        for f_val in data_f64 {
-            assert!(
-                f_val.abs() <= 1.,
-                "wave amplitude is not within [-1, 1] range"
-            );
-            self.push(f_val as f32);
-        }
+    fn push_sample_data_from_f64(&mut self, data: f64) {
+        self.push(data as f32);
     }
 }

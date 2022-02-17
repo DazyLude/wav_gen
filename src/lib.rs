@@ -1,5 +1,5 @@
 mod math;
-
+pub mod track;
 pub mod wave_data;
 
 // notesheet should be passed to harmonics, then they give the note structs
