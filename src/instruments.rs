@@ -66,23 +66,17 @@ impl fmt::Display for Note {
 
 pub trait Instrument {
     type NoteType;
-    fn from_parameters(&mut self, parameters: Vec<(&str, &str)>) -> Result<i64, &'static str> {
+    fn from_parameters(&mut self, parameters: Vec<&(String, String)>) -> Result<i64, &'static str> {
         let mut successes: i64 = 0;
         for param in parameters {
-            match self.set_parameter(param.0, param.1) {
+            match self.update(param) {
                 Ok(_) => successes += 1,
                 Err(e) => return Err(e),
             }
         }
         return Ok(successes);
     }
-    fn set_parameters(&mut self, params: Vec<(&str, &str)>) -> Result<bool, &'static str> {
-        for param in params {
-            self.set_parameter(param.0, param.1)?;
-        }
-        return Ok(true);
-    }
-    fn set_parameter(&mut self, name: &str, value: &str) -> Result<(), &'static str>;
+    fn update(&mut self, param: &(String, String)) -> Result<(), &'static str>;
     fn track_from_notes(self, part: &Vec<Note>) -> track::Track;
 }
 
@@ -126,10 +120,10 @@ impl SineWave {
 
 impl Instrument for SineWave {
     type NoteType = crate::harmonics::MelodicNote;
-    fn set_parameter(&mut self, name: &str, value: &str) -> Result<(), &'static str> {
-        match name {
+    fn update(&mut self, param: &(String, String)) -> Result<(), &'static str> {
+        match param.0.as_str() {
             "freq_mod" => {
-                self.freq_mod = match value.parse::<f64>() {
+                self.freq_mod = match param.1.parse::<f64>() {
                     Ok(val) => val,
                     Err(_) => return Err("failed parsing str to f64"),
                 }

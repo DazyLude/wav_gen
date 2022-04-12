@@ -7,7 +7,6 @@ pub trait WaveData {
     fn get_bits_per_sample(&self) -> u16;
     fn get_encoding(&self) -> u16;
     fn len(&self) -> usize;
-
     fn to_byte_slice(&self) -> Vec<u8>;
     fn push_sample_data_from_f64(&mut self, data: f64);
     fn generate_from_wave(&mut self, wave: &Vec<f64>, sample_rate: u32) {
@@ -20,6 +19,7 @@ pub trait WaveData {
             self.push_sample_data_from_f64(f_val);
         }
     }
+    fn new() -> Self;
 }
 
 impl WaveData for Vec<u8> {
@@ -44,6 +44,10 @@ impl WaveData for Vec<u8> {
     }
     fn push_sample_data_from_f64(&mut self, data: f64) {
         self.push(((data + 1.) * 127.) as u8);
+    }
+    fn new() -> Self {
+        let temp_vec: Vec<u8> = Vec::new();
+        return temp_vec;
     }
 }
 
@@ -72,6 +76,10 @@ impl WaveData for Vec<i16> {
     fn push_sample_data_from_f64(&mut self, data: f64) {
         self.push((data * 32760.) as i16);
     }
+    fn new() -> Self {
+        let temp_vec: Vec<i16> = Vec::new();
+        return temp_vec;
+    }
 }
 
 impl WaveData for Vec<f32> {
@@ -98,5 +106,9 @@ impl WaveData for Vec<f32> {
     }
     fn push_sample_data_from_f64(&mut self, data: f64) {
         self.push(data as f32);
+    }
+    fn new() -> Self {
+        let temp_vec: Vec<f32> = Vec::new();
+        return temp_vec;
     }
 }

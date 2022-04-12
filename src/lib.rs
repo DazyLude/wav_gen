@@ -24,7 +24,7 @@ use std::io::BufReader;
 
 // .wavg file interpretator and main routine
 
-pub fn director(wavg_filename: &OsString, debug: bool) -> std::io::Result<()> {
+pub fn director(wavg_filename: &OsString) -> std::io::Result<()> {
     let file = fs::File::open(wavg_filename)?;
     let file = BufReader::new(file);
     let mut counter: i64 = 0;
@@ -33,30 +33,37 @@ pub fn director(wavg_filename: &OsString, debug: bool) -> std::io::Result<()> {
     let mut notes: Vec<instruments::Note> = Vec::new();
     let mut global_pars: GlobalParameters = GlobalParameters::new_default();
     let mut track: Track = track::Track::new();
+
+    fn cut_with_colon(split: &str, counter: i64) -> (String, String) {
+        match split.find(':') {
+            None => panic!("wavg synthax error: no colon in parameter definition at line {}", counter),
+            Some(colon) => (split.get(0..colon).unwrap().trim().to_string(),split.get(colon+1..).unwrap().trim().to_string()),
+        }
+    }
   
     // Parser "the cursed" edition
     for wrapped in file.lines() {
         counter += 1;
         let line = wrapped.unwrap().trim().to_string();
-        // Commentaries are being ignored
+        // Commentaries and empty lines are being ignored
         if line.get(0..1) == Some("#") || line == "" {
-            if debug {println!("skipped line {counter}");}
             continue;
         }
         match line.find(':') {
             // The notebar and special keyword lines don't have colons
             None => {
+
+
                 // keywords:
                 // "record" flushes notes into instrument
                 if line == "record" {
-                    if debug {println!("recording at line {counter}");}
                     match player {
                         instruments::InstrumentList::None => 
                             panic!("wavg synthax error: parsing notes before defining an instrument at line {counter}"),
                         instruments::InstrumentList::SineWave => {
                             let mut sine = instruments::SineWave::new();
-                            for par in &player_pars { 
-                                match sine.set_parameter(&par.0.as_str(), &par.1.as_str()) {
+                            for par in player_pars.clone() { 
+                                match sine.update(&par) {
                                     Err(s) => panic!("Failed setting a parameter {s} for SineWave: parameter does not exist."),
                                     Ok(_) => {}
                                 }
@@ -69,7 +76,6 @@ pub fn director(wavg_filename: &OsString, debug: bool) -> std::io::Result<()> {
                 }
                 // "end" finishes this comedy
                 if line == "end" {
-                    if debug {println!("end at line {counter}");}
                     break;
                 }
                 // if this is not a keyword, then it is a notebar
@@ -84,7 +90,6 @@ pub fn director(wavg_filename: &OsString, debug: bool) -> std::io::Result<()> {
                     .trim()
                     .parse::<i64>()
                     .unwrap();
-                if debug {println!("parsing bar {bar_index}:");}
                 match player {
                     instruments::InstrumentList::None => {
                         panic!("wavg synthax error: parsing notes before defining an instrument at line {counter}");
@@ -132,61 +137,47 @@ pub fn director(wavg_filename: &OsString, debug: bool) -> std::io::Result<()> {
                         for entry in line.get(first_comma_position..).unwrap().split(',') {
                             // if this was just an instrument declaration, we can go on
                             if entry == "" {continue;}
-                            match entry.find(':') {
-                                None => panic!("wavg synthax error: no colon in global config definition at line {counter}"),
-                                Some(colon) => {
-                                    let name = entry.get(0..colon).unwrap().trim().to_string();
-                                    let val = entry.get(colon+1..).unwrap().trim().to_string();
-                                    if debug {println!("passing {name} with a value: {val} to sinewave");}
-                                    player_pars.push((name,val));
-                                }
-                            }
+                            player_pars.push(cut_with_colon(entry, counter));
                         }
                     }
                     // Name: Example, BPM: 60, Time_Signature: 4/4
                     _ => {
                         for entry in line.split(',') {
-                            match entry.find(':') {
-                                None => panic!("wavg synthax error: no colon in global config definition at line {counter}"),
-                                Some(colon) => {
-                                    let name = entry.get(0..colon).unwrap().trim();
-                                    let val = entry.get(colon+1..).unwrap().trim();
-                                    if debug {println!("passing {name} with a value: {val} to global_parameters");}
-                                    global_pars.update((name, val)).unwrap();
-                                }
-                            };
-                        }
+                            global_pars.update(&cut_with_colon(entry, counter)).unwrap();
+                        };
+                        
                     }
                 }
             }
         }
     }
+
     track.normalize();
     track.apply_loudness();
 
+    let mut this_file_name = format!("{}.wav", global_pars.name);
+    let mut this_file_index = 0; 
+    while std::path::Path::new(&this_file_name).exists() {
+        this_file_name = format!("{}({}).wav", global_pars.name, this_file_index); 
+        this_file_index += 1;
+    }
+    global_pars.name = this_file_name;
+
     match global_pars.bits_per_sample {
         8 => {
-            let mut data: Vec<u8> = Vec::new();
-            data.generate_from_wave(&track.track, global_pars.sample_rate);
-            let cfg: WavConfig<Vec<u8>> = WavConfig::new("test.wav".to_string(), 1, global_pars.sample_rate, data);
-            gen_wav_file(cfg);
+            global_pars.generate_wav_file::<Vec<u8>>(&track);
         },
         16 => {
-            let mut data: Vec<i16> = Vec::new();
-            data.generate_from_wave(&track.track, global_pars.sample_rate);
-            let cfg: WavConfig<Vec<i16>> = WavConfig::new("test.wav".to_string(), 1, global_pars.sample_rate, data);
-            gen_wav_file(cfg);
+            global_pars.generate_wav_file::<Vec<i16>>(&track);
         },
         32 => {
-            let mut data: Vec<f32> = Vec::new();
-            data.generate_from_wave(&track.track, global_pars.sample_rate);
-            let cfg: WavConfig<Vec<f32>> = WavConfig::new("test.wav".to_string(), 1, global_pars.sample_rate, data);
-            gen_wav_file(cfg);
+            global_pars.generate_wav_file::<Vec<f32>>(&track);
         },
         _ => panic!("unknown bits per sample setting: {}. Try 8, 16 or 32", global_pars.bits_per_sample)
     } 
     Ok(())
 }
+
 
 struct GlobalParameters {
     name: String,
@@ -210,7 +201,15 @@ impl GlobalParameters {
             fade_time: (1, 32),
         }
     }
-    fn update<'a>(&mut self, param: (&'a str, &'a str)) -> Result<(), &'a str> {
+    // столько мучений, чтобы 3 повтора по 4 строки -> 3 повтора по 1 я доволен
+    fn generate_wav_file<T: WaveData> (&self, datatrack: &track::Track) {
+        let mut data = T::new();
+        data.generate_from_wave(&datatrack.track, self.sample_rate);
+        let cfg: WavConfig<T> = WavConfig::new(self.name.clone(), 1, self.sample_rate, data);
+        gen_wav_file(cfg);
+    }
+
+    fn update<'a>(&mut self, param: &'a (String, String)) -> Result<(), &'a str> {
         match param.0.to_ascii_lowercase().as_str() {
             "name" => self.name = param.1.trim().to_string(),
             "samplerate" => self.sample_rate = param.1.trim().parse::<u32>().unwrap(),
@@ -225,7 +224,7 @@ impl GlobalParameters {
             "fademode" => {
                 self.fade_mode = match param.1.trim().to_ascii_lowercase().as_str() {
                     "linear" => track::FadeMode::Linear,
-                    _ => return Err(param.1),
+                    _ => return Err(&param.1),
                 }
             }
             "fadetime" => {
@@ -248,7 +247,7 @@ impl GlobalParameters {
                 );
             }
             _ => {
-                return Err(param.0);
+                return Err(param.0.as_str());
             }
         }
         
