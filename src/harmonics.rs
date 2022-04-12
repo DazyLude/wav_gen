@@ -83,9 +83,9 @@ impl ToNote for MelodicNote {
             ToneVariant::Numeric(val) => val,
         };
         crate::instruments::Note::new(
-            440. * (semitones as f64 / 12.).exp2(),                // freq
-            pars[0] * self.length.0 as f64 / self.length.1 as f64, // leng
-            pars[0] * (pars[1] + 4. * self.delta.0 as f64 / self.delta.1 as f64), // time
+            440. * (semitones as f64 / 12.).exp2(), // freq
+            self.length.0 as f64 / self.length.1 as f64 * 240. / pars[0], // leng
+            (pars[1] + 4. * self.delta.0 as f64 / self.delta.1 as f64) * 60. / pars[0], // time
         )
     }
 }

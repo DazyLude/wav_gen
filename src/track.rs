@@ -11,7 +11,7 @@ impl From<Vec<f64>> for Track {
         Track {
             track: thing,
             starting_sample_index: 0,
-            loudness: 0.,
+            loudness: 1.,
         }
     }
 }
@@ -60,7 +60,7 @@ impl Track {
         Track {
             track,
             starting_sample_index: 0,
-            loudness: 0.,
+            loudness: 1.,
         }
     }
     pub fn t_end(&self) -> f64 {
@@ -78,12 +78,39 @@ impl Track {
         }
     }
     pub fn sample_in_global(&self, i: usize) -> f64 {
-        let index = i - self.starting_sample_index;
-        if index > 0 && index < self.track.len() {
-            self.track[index]
+        if i > self.starting_sample_index && i - self.starting_sample_index < self.track.len() {
+            self.track[i - self.starting_sample_index]
         } else {
             0.
         }
+    }
+    pub fn get_value_at_t(&self, sample_time: f64) -> f64 {
+        if self.track.len() == 0 {
+            return 0.;
+        }
+        let mut sampling_sample = (sample_time * DESIRED_SAMPLE_RATE as f64).floor() as usize;
+        if sampling_sample < self.starting_sample_index {
+            return 0.;
+        }
+        sampling_sample -= self.starting_sample_index;
+        if sampling_sample > self.track.len() {
+            return 0.;
+        }
+        self.track[sampling_sample - 1]
+    }
+    pub fn get_deriv_at_t(&self, sample_time: f64) -> f64 {
+        if self.track.len() == 0 {
+            return 0.;
+        }
+        let mut sampling_sample = (sample_time * DESIRED_SAMPLE_RATE as f64).floor() as usize - 1;
+        if sampling_sample < self.starting_sample_index {
+            return 0.;
+        }
+        sampling_sample -= self.starting_sample_index;
+        if sampling_sample > self.track.len() {
+            return 0.;
+        }
+        self.track[sampling_sample - 1]
     }
     pub fn mix(&mut self, another: &mut Track) -> Track {
         //true values represent self partially covering another and self starting earlier

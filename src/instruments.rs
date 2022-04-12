@@ -50,6 +50,17 @@ impl Note {
     }
 }
 
+use std::fmt;
+impl fmt::Display for Note {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Freq: {};\tLength: {};\tTiming: {};\tLoud: {};",
+            self.freq, self.leng, self.time, self.loud
+        )
+    }
+}
+
 // Instruments are compilation of methods and coefficients that turn notes into soundwaves
 // Simplest one is a sinewave.
 
@@ -71,7 +82,7 @@ pub trait Instrument {
         }
         return Ok(true);
     }
-    fn set_parameter(&mut self, name: &str, value: &str) -> Result<bool, &'static str>;
+    fn set_parameter(&mut self, name: &str, value: &str) -> Result<(), &'static str>;
     fn track_from_notes(self, part: &Vec<Note>) -> track::Track;
 }
 
@@ -84,7 +95,14 @@ impl SineWave {
     pub fn new() -> SineWave {
         SineWave { freq_mod: 1.0 }
     }
-    pub fn gen_sine_wave_from_x0(freq: f64, t0: f64, t1: f64, x0: f64, deriv: f64) -> Vec<f64> {
+    pub fn gen_sine_wave_from_x0(
+        freq: f64,
+        t0: f64,
+        t1: f64,
+        x0: f64,
+        deriv: f64,
+        loud: f64,
+    ) -> Vec<f64> {
         assert!(t0 < t1, "t0 ({t0}) should be less then t1 ({t1})");
         let freq_r = freq * 2. * std::f64::consts::PI;
         let phase_sign = (x0 - deriv).signum();
@@ -94,10 +112,13 @@ impl SineWave {
             std::f64::consts::PI - (x0).asin()
         };
         let mut target_vector: Vec<f64> = Vec::new();
-        let times =
-            math::linspace_from_n(t0, t1, (t1 - t0) as i64 * track::DESIRED_SAMPLE_RATE as i64);
+        let times = math::linspace_from_n(
+            t0,
+            t1,
+            ((t1 - t0) * track::DESIRED_SAMPLE_RATE as f64) as i64 + 1,
+        );
         for i in times {
-            target_vector.push((phase_shift + freq_r * (i - t0)).sin());
+            target_vector.push(loud * (phase_shift + freq_r * (i - t0)).sin());
         }
         target_vector
     }
@@ -105,7 +126,7 @@ impl SineWave {
 
 impl Instrument for SineWave {
     type NoteType = crate::harmonics::MelodicNote;
-    fn set_parameter(&mut self, name: &str, value: &str) -> Result<bool, &'static str> {
+    fn set_parameter(&mut self, name: &str, value: &str) -> Result<(), &'static str> {
         match name {
             "freq_mod" => {
                 self.freq_mod = match value.parse::<f64>() {
@@ -115,26 +136,29 @@ impl Instrument for SineWave {
             }
             _ => return Err("setting an unexisting parameter"),
         }
-        return Ok(true);
+        return Ok(());
     }
 
     fn track_from_notes(self, part: &Vec<Note>) -> track::Track {
-        let mut track: Vec<f64> = Vec::new();
+        let mut temp_track: track::Track = track::Track::new();
         if !part.is_empty() {
-            let mut x0 = 0.;
-            let mut x_deriv = 0.;
             for note in part {
-                track.append(&mut SineWave::gen_sine_wave_from_x0(
-                    note.freq,
-                    note.time,
-                    note.leng + note.time,
-                    x0,
-                    x_deriv,
-                ));
-                x0 = track.pop().unwrap_or(0.);
-                x_deriv = *track.last().unwrap_or(&0.);
+                let x0 = temp_track.get_value_at_t(note.time);
+                let x_deriv = temp_track.get_deriv_at_t(note.time);
+                temp_track = temp_track.mix(&mut track::Track {
+                    track: SineWave::gen_sine_wave_from_x0(
+                        note.freq * self.freq_mod,
+                        note.time,
+                        note.leng + note.time,
+                        x0,
+                        x_deriv,
+                        note.loud,
+                    ),
+                    starting_sample_index: (note.time * track::DESIRED_SAMPLE_RATE as f64) as usize,
+                    loudness: 1.,
+                });
             }
         }
-        track::Track::from(track)
+        temp_track
     }
 }

@@ -10,7 +10,6 @@ pub mod wave_data;
 // and then they return sound data, which is passed to WaveData, which generates .wav file
 pub mod instruments;
 
-
 use crate::instruments::Instrument;
 use crate::track::Track;
 use crate::wave_data::WaveData;
@@ -25,7 +24,7 @@ use std::io::BufReader;
 
 // .wavg file interpretator and main routine
 
-pub fn director(wavg_filename: &OsString) -> std::io::Result<()> {
+pub fn director(wavg_filename: &OsString, debug: bool) -> std::io::Result<()> {
     let file = fs::File::open(wavg_filename)?;
     let file = BufReader::new(file);
     let mut counter: i64 = 0;
@@ -34,13 +33,14 @@ pub fn director(wavg_filename: &OsString) -> std::io::Result<()> {
     let mut notes: Vec<instruments::Note> = Vec::new();
     let mut global_pars: GlobalParameters = GlobalParameters::new_default();
     let mut track: Track = track::Track::new();
-
+  
     // Parser "the cursed" edition
     for wrapped in file.lines() {
         counter += 1;
         let line = wrapped.unwrap().trim().to_string();
         // Commentaries are being ignored
         if line.get(0..1) == Some("#") || line == "" {
+            if debug {println!("skipped line {counter}");}
             continue;
         }
         match line.find(':') {
@@ -49,13 +49,19 @@ pub fn director(wavg_filename: &OsString) -> std::io::Result<()> {
                 // keywords:
                 // "record" flushes notes into instrument
                 if line == "record" {
+                    if debug {println!("recording at line {counter}");}
                     match player {
                         instruments::InstrumentList::None => 
                             panic!("wavg synthax error: parsing notes before defining an instrument at line {counter}"),
                         instruments::InstrumentList::SineWave => {
                             let mut sine = instruments::SineWave::new();
-                            for par in &player_pars {sine.set_parameter(&par.0.as_str(), &par.1.as_str()).unwrap();}
-                            track.mix(&mut sine.track_from_notes(&notes));
+                            for par in &player_pars { 
+                                match sine.set_parameter(&par.0.as_str(), &par.1.as_str()) {
+                                    Err(s) => panic!("Failed setting a parameter {s} for SineWave: parameter does not exist."),
+                                    Ok(_) => {}
+                                }
+                            }
+                            track = track.mix(&mut sine.track_from_notes(&notes));
                             notes = Vec::new();
                         }
                     }
@@ -63,40 +69,43 @@ pub fn director(wavg_filename: &OsString) -> std::io::Result<()> {
                 }
                 // "end" finishes this comedy
                 if line == "end" {
+                    if debug {println!("end at line {counter}");}
                     break;
                 }
                 // if this is not a keyword, then it is a notebar
                 if line.find(',') == None {
                     panic!("wavg synthax error: no commas in bar definition at line {counter}");
                 }
-
                 let first_comma_position = line.find(',').unwrap();
+
                 let bar_index = line
                     .get(..first_comma_position)
                     .unwrap()
                     .trim()
                     .parse::<i64>()
                     .unwrap();
+                if debug {println!("parsing bar {bar_index}:");}
                 match player {
-                    instruments::InstrumentList::None => 
-                        panic!("wavg synthax error: parsing notes before defining an instrument at line {counter}"),
+                    instruments::InstrumentList::None => {
+                        panic!("wavg synthax error: parsing notes before defining an instrument at line {counter}");
+                    }
                     instruments::InstrumentList::SineWave => {
                         for element in line.get(first_comma_position + 1..).unwrap().split(',') {
                             notes.push(
                                 // this gets a note string, converts it to melodic note, and then converts melodic note to note
                                 harmonics::MelodicNote::make_note(element.trim(),Vec::from(
                                             [global_pars.beats_per_minute,
-                                            bar_index as f64 * 4.* global_pars.time_signature.0 as f64 / global_pars.time_signature.1 as f64]
+                                            (bar_index - 1) as f64 * 4. * global_pars.time_signature.0 as f64 / global_pars.time_signature.1 as f64]
                                     )
                                 )
                             );
+                            println!("parsed note: {}, behold my might!", notes.last().unwrap());
                         }
                     }
                 }
             }
             // if colon was found, then it's a configuration line
-            Some(first_colon_position) => {
-                
+            Some(first_colon_position) => { 
                 // checking if the first word is a keyword
                 match line
                     .get(0..first_colon_position)
@@ -108,7 +117,7 @@ pub fn director(wavg_filename: &OsString) -> std::io::Result<()> {
                     // Notesheet: instrument, param1: value1, param2: value2, param3: value3
                     // "notesheet" keyword defines the instrument used for the following bars
                     "notesheet" => {
-                        let first_comma_position = line.trim().find(',').unwrap();
+                        let first_comma_position = line.trim().find(',').unwrap_or_else(||(line.trim().len() - 1) as usize);
                         match line
                             .get(first_colon_position + 1..first_comma_position)
                             .unwrap()
@@ -121,11 +130,16 @@ pub fn director(wavg_filename: &OsString) -> std::io::Result<()> {
                         }
                         // else, there should be instrument config
                         for entry in line.get(first_comma_position..).unwrap().split(',') {
-                        // if this was just an instrument declaration, we can go on
+                            // if this was just an instrument declaration, we can go on
                             if entry == "" {continue;}
                             match entry.find(':') {
                                 None => panic!("wavg synthax error: no colon in global config definition at line {counter}"),
-                                Some(colon) => player_pars.push((entry.get(0..colon).unwrap().trim().to_string(), entry.get(colon+1..entry.len()).unwrap().trim().to_string())),
+                                Some(colon) => {
+                                    let name = entry.get(0..colon).unwrap().trim().to_string();
+                                    let val = entry.get(colon+1..).unwrap().trim().to_string();
+                                    if debug {println!("passing {name} with a value: {val} to sinewave");}
+                                    player_pars.push((name,val));
+                                }
                             }
                         }
                     }
@@ -133,8 +147,13 @@ pub fn director(wavg_filename: &OsString) -> std::io::Result<()> {
                     _ => {
                         for entry in line.split(',') {
                             match entry.find(':') {
-                            None => panic!("wavg synthax error: no colon in global config definition at line {counter}"),
-                            Some(colon) => global_pars.update((entry.get(0..colon).unwrap().trim(), entry.get(colon+1..entry.len()).unwrap().trim())).unwrap(),
+                                None => panic!("wavg synthax error: no colon in global config definition at line {counter}"),
+                                Some(colon) => {
+                                    let name = entry.get(0..colon).unwrap().trim();
+                                    let val = entry.get(colon+1..).unwrap().trim();
+                                    if debug {println!("passing {name} with a value: {val} to global_parameters");}
+                                    global_pars.update((name, val)).unwrap();
+                                }
                             };
                         }
                     }
@@ -143,6 +162,7 @@ pub fn director(wavg_filename: &OsString) -> std::io::Result<()> {
         }
     }
     track.normalize();
+    track.apply_loudness();
 
     match global_pars.bits_per_sample {
         8 => {
