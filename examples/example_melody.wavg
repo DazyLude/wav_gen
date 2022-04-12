@@ -1,0 +1,23 @@
+# This is wav_gen notesheet text file.
+# Lines marked by '#' character are commentaries and are skipped when parsing the file
+# Each file starts with config line for this notesheet which looks as follows
+Name: Example, BPM: 60, Time_Signature: 4/4
+# Entries are separated by commas. Spaces are not mandatory.
+# Undeclared parametres are set at default values. Entry names are case insensitive
+# Then go the notesheets for the instruments. First comes the name of the instrument
+Notesheet: SineWave, freq_mod: 1.
+# This is followed by the notes in the following format
+1, C3 0 1/4, E3 some_text 1/4 1/4, G3 no_variant 1/4 1/4
+# The following will modify an existing sinewave instrument
+record
+2, C3 d 0 1/4, E3 sharp 1/4 1/4, G3 Sharp 2/4 1/4
+record
+Notesheet: SineWave, freq_mod: 2.
+3, C3 b 0 1/4, E3 flat 1/4 1/4, G3 Flat 1/4 1/4
+record
+# Each line is a bar, and it contains notes, separated by comma symbols
+# Each note comes with name of the note and it's octave
+# followed by variant
+# followed by time passed since the beginning of the bar
+# followed by the length of this note
+end

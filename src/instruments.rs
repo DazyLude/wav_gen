@@ -1,9 +1,12 @@
 use crate::math;
 use crate::track;
 
+pub enum InstrumentList {
+    None,
+    SineWave,
+}
 // Note is a struct that contains data about >>>main<<< frequency of a sound,
 // it's length and when it starts. Different instruments will produce different soundwaves.
-
 pub struct Note {
     // Frequency can define note by itself. It's the thing that really matters. In Hz.
     freq: f64,
@@ -11,11 +14,26 @@ pub struct Note {
     leng: f64,
     // Time from the start of the track, when this should be played, in seconds.
     time: f64,
+    // Relative loudness of the note
+    loud: f64,
 }
 
 impl Note {
+    pub fn zeroed() -> Note {
+        Note {
+            freq: 0.,
+            leng: 0.,
+            time: 0.,
+            loud: 0.,
+        }
+    }
     pub fn new(freq: f64, leng: f64, time: f64) -> Note {
-        Note { freq, leng, time }
+        Note {
+            freq,
+            leng,
+            time,
+            loud: 1.,
+        }
     }
 
     pub fn next(&self, freq: f64, leng: f64) -> Note {
@@ -36,14 +54,36 @@ impl Note {
 // Simplest one is a sinewave.
 
 pub trait Instrument {
-    fn track_from_notes(part: &Vec<Note>) -> track::Track;
+    type NoteType;
+    fn from_parameters(&mut self, parameters: Vec<(&str, &str)>) -> Result<i64, &'static str> {
+        let mut successes: i64 = 0;
+        for param in parameters {
+            match self.set_parameter(param.0, param.1) {
+                Ok(_) => successes += 1,
+                Err(e) => return Err(e),
+            }
+        }
+        return Ok(successes);
+    }
+    fn set_parameters(&mut self, params: Vec<(&str, &str)>) -> Result<bool, &'static str> {
+        for param in params {
+            self.set_parameter(param.0, param.1)?;
+        }
+        return Ok(true);
+    }
+    fn set_parameter(&mut self, name: &str, value: &str) -> Result<bool, &'static str>;
+    fn track_from_notes(self, part: &Vec<Note>) -> track::Track;
 }
 
 // Just a sinewave
-
-pub struct SineWave {}
+pub struct SineWave {
+    freq_mod: f64,
+}
 
 impl SineWave {
+    pub fn new() -> SineWave {
+        SineWave { freq_mod: 1.0 }
+    }
     pub fn gen_sine_wave_from_x0(freq: f64, t0: f64, t1: f64, x0: f64, deriv: f64) -> Vec<f64> {
         assert!(t0 < t1, "t0 ({t0}) should be less then t1 ({t1})");
         let freq_r = freq * 2. * std::f64::consts::PI;
@@ -64,7 +104,21 @@ impl SineWave {
 }
 
 impl Instrument for SineWave {
-    fn track_from_notes(part: &Vec<Note>) -> track::Track {
+    type NoteType = crate::harmonics::MelodicNote;
+    fn set_parameter(&mut self, name: &str, value: &str) -> Result<bool, &'static str> {
+        match name {
+            "freq_mod" => {
+                self.freq_mod = match value.parse::<f64>() {
+                    Ok(val) => val,
+                    Err(_) => return Err("failed parsing str to f64"),
+                }
+            }
+            _ => return Err("setting an unexisting parameter"),
+        }
+        return Ok(true);
+    }
+
+    fn track_from_notes(self, part: &Vec<Note>) -> track::Track {
         let mut track: Vec<f64> = Vec::new();
         if !part.is_empty() {
             let mut x0 = 0.;
