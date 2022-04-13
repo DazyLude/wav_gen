@@ -65,7 +65,6 @@ impl fmt::Display for Note {
 // Simplest one is a sinewave.
 
 pub trait Instrument {
-    type NoteType;
     fn from_parameters(&mut self, parameters: Vec<&(String, String)>) -> Result<i64, &'static str> {
         let mut successes: i64 = 0;
         for param in parameters {
@@ -76,6 +75,7 @@ pub trait Instrument {
         }
         return Ok(successes);
     }
+    fn new() -> Self;
     fn update(&mut self, param: &(String, String)) -> Result<(), &'static str>;
     fn track_from_notes(self, part: &Vec<Note>) -> track::Track;
 }
@@ -119,7 +119,9 @@ impl SineWave {
 }
 
 impl Instrument for SineWave {
-    type NoteType = crate::harmonics::MelodicNote;
+    fn new() -> Self {
+        SineWave { freq_mod: 1.0 }
+    }
     fn update(&mut self, param: &(String, String)) -> Result<(), &'static str> {
         match param.0.as_str() {
             "freq_mod" => {
@@ -155,4 +157,9 @@ impl Instrument for SineWave {
         }
         temp_track
     }
+}
+
+// Smooth Sine: sine with fade-ins and fade-outs
+pub struct SmoothSine {
+    fademode: track::FadeMode,
 }

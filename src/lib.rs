@@ -10,17 +10,21 @@ pub mod wave_data;
 // and then they return sound data, which is passed to WaveData, which generates .wav file
 pub mod instruments;
 
-use crate::instruments::Instrument;
+
+use crate::harmonics::MakeNote;
 use crate::track::Track;
 use crate::wave_data::WaveData;
 use std::ffi::OsString;
 use std::fs;
 use std::io::Write;
-
+use instruments::InstrumentList;
+use instruments::Instrument;
 
 // black magic that makes BufRead work
 use std::io::prelude::*;
 use std::io::BufReader;
+
+
 
 // .wavg file interpretator and main routine
 
@@ -28,7 +32,7 @@ pub fn director(wavg_filename: &OsString) -> std::io::Result<()> {
     let file = fs::File::open(wavg_filename)?;
     let file = BufReader::new(file);
     let mut counter: i64 = 0;
-    let mut player: instruments::InstrumentList = instruments::InstrumentList::None;
+    let mut player: InstrumentList = InstrumentList::None;
     let mut player_pars: Vec<(String, String)> = Vec::new(); 
     let mut notes: Vec<instruments::Note> = Vec::new();
     let mut global_pars: GlobalParameters = GlobalParameters::new_default();
@@ -40,112 +44,109 @@ pub fn director(wavg_filename: &OsString) -> std::io::Result<()> {
             Some(colon) => (split.get(0..colon).unwrap().trim().to_string(),split.get(colon+1..).unwrap().trim().to_string()),
         }
     }
-  
+
+    fn unwrap_update (res: Result<(), &str>, counter: i64) {
+        match res {
+            Err(e) => panic!("you passed a wrong parameter, buddy: {e}, at line: {counter}"),
+            Ok(()) => {}
+        }
+    }
+
+    fn get_note_type (instrument: &InstrumentList, counter: i64) -> harmonics::NoteType {
+        match instrument {
+            InstrumentList::None => panic!(
+                "wavg synthax error: parsing notes before defining an instrument at line {counter}"),
+            InstrumentList::SineWave => harmonics::NoteType::MelodicNote,
+        }
+    }
+
+    let frac = |x: (i64, i64)| -> f64 {x.0 as f64 / x.1 as f64};
+
+    fn record<T: Instrument>(pars: &Vec<(String, String)>, notes: &Vec<instruments::Note>, counter: i64) -> track::Track {
+        let mut player: T = T::new();
+        for par in pars.clone() { 
+            unwrap_update(player.update(&par), counter);
+        }
+        player.track_from_notes(&notes)
+    }
+
     // Parser "the cursed" edition
     for wrapped in file.lines() {
         counter += 1;
-        let line = wrapped.unwrap().trim().to_string();
+        let line = wrapped.unwrap().trim().to_ascii_lowercase().to_string();
         // Commentaries and empty lines are being ignored
         if line.get(0..1) == Some("#") || line == "" {
             continue;
         }
-        match line.find(':') {
-            // The notebar and special keyword lines don't have colons
-            None => {
-
-
-                // keywords:
-                // "record" flushes notes into instrument
-                if line == "record" {
-                    match player {
-                        instruments::InstrumentList::None => 
-                            panic!("wavg synthax error: parsing notes before defining an instrument at line {counter}"),
-                        instruments::InstrumentList::SineWave => {
-                            let mut sine = instruments::SineWave::new();
-                            for par in player_pars.clone() { 
-                                match sine.update(&par) {
-                                    Err(s) => panic!("Failed setting a parameter {s} for SineWave: parameter does not exist."),
-                                    Ok(_) => {}
-                                }
-                            }
-                            track = track.mix(&mut sine.track_from_notes(&notes));
-                            notes = Vec::new();
+        match (line.find(':'), line.find(',')) {
+            //keyword lines have neither colons nor commas
+            (None, None) => { 
+                match line.as_str() {
+                    // "record" flushes notes into instrument
+                    "record" => {
+                        match player {
+                            InstrumentList::None => 
+                                panic!("wavg synthax error: parsing notes before defining an instrument at line {counter}"),
+                            InstrumentList::SineWave => 
+                                track = track.mix(&mut record::<instruments::SineWave>(&player_pars, &notes, counter)),  
                         }
+                        notes = Vec::new();
                     }
-                    continue;
+                    // "end" finishes this comedy
+                    "end" => break,
+                    _ => panic!("wavg synthax error: not a keyword at line {counter}"),
                 }
-                // "end" finishes this comedy
-                if line == "end" {
-                    break;
-                }
-                // if this is not a keyword, then it is a notebar
-                if line.find(',') == None {
-                    panic!("wavg synthax error: no commas in bar definition at line {counter}");
-                }
-                let first_comma_position = line.find(',').unwrap();
+            }
+            //notebar lines don't have colons
+            (None, Some(first_comma_pos)) => {
+                let bar_index = match line.get(..first_comma_pos).unwrap().trim().parse::<i64>() {
+                    Ok(n) => n,
+                    Err(_) => panic!("wavg synthax error: incorrect bar number at line {counter}"),
+                };
+                let bar_timing = (bar_index - 1) as f64 * 4. * frac(global_pars.time_signature);
 
-                let bar_index = line
-                    .get(..first_comma_position)
-                    .unwrap()
-                    .trim()
-                    .parse::<i64>()
-                    .unwrap();
-                match player {
-                    instruments::InstrumentList::None => {
-                        panic!("wavg synthax error: parsing notes before defining an instrument at line {counter}");
-                    }
-                    instruments::InstrumentList::SineWave => {
-                        for element in line.get(first_comma_position + 1..).unwrap().split(',') {
+                match get_note_type(&player, counter) {
+                    harmonics::NoteType::MelodicNote => {
+                        for element in line.get(first_comma_pos + 1..).unwrap().split(',') {
                             notes.push(
-                                // this gets a note string, converts it to melodic note, and then converts melodic note to note
-                                harmonics::MelodicNote::make_note(element.trim(),Vec::from(
-                                            [global_pars.beats_per_minute,
-                                            (bar_index - 1) as f64 * 4. * global_pars.time_signature.0 as f64 / global_pars.time_signature.1 as f64]
-                                    )
+                                harmonics::MelodicNote::make_note(
+                                    element.trim(),
+                                    Vec::from([global_pars.beats_per_minute, bar_timing])
                                 )
                             );
-                            println!("parsed note: {}, behold my might!", notes.last().unwrap());
                         }
                     }
                 }
             }
-            // if colon was found, then it's a configuration line
-            Some(first_colon_position) => { 
-                // checking if the first word is a keyword
-                match line
-                    .get(0..first_colon_position)
-                    .unwrap()
-                    .trim()
-                    .to_ascii_lowercase()
-                    .as_str()
+            // config lines have colons, commas are optional
+            (Some(first_colon), first_comma_option) => {
+                match line.get(0..first_colon).unwrap().trim() 
                 {
-                    // Notesheet: instrument, param1: value1, param2: value2, param3: value3
                     // "notesheet" keyword defines the instrument used for the following bars
                     "notesheet" => {
-                        let first_comma_position = line.trim().find(',').unwrap_or_else(||(line.trim().len() - 1) as usize);
-                        match line
-                            .get(first_colon_position + 1..first_comma_position)
-                            .unwrap()
-                            .trim()
-                            .to_ascii_lowercase()
-                            .as_str()
+                        let first_comma: usize = match first_comma_option{
+                            None => line.len(),
+                            Some(val) => val,
+                        };
+
+                        match line.get(first_colon + 1..first_comma).unwrap().trim() 
                         {
-                            "sinewave" => player = instruments::InstrumentList::SineWave,
+                            "sinewave" => player = InstrumentList::SineWave,
                             _ => panic!("wavg synthax error: instrument not found; line {counter}"),
                         }
+
                         // else, there should be instrument config
-                        for entry in line.get(first_comma_position..).unwrap().split(',') {
+                        for entry in line.get(first_comma..).unwrap().split(',') {
                             // if this was just an instrument declaration, we can go on
                             if entry == "" {continue;}
                             player_pars.push(cut_with_colon(entry, counter));
                         }
                     }
-                    // Name: Example, BPM: 60, Time_Signature: 4/4
+                    // if not a notesheet, then a global config line
                     _ => {
                         for entry in line.split(',') {
-                            global_pars.update(&cut_with_colon(entry, counter)).unwrap();
+                            unwrap_update(global_pars.update(&cut_with_colon(entry, counter)), counter);
                         };
-                        
                     }
                 }
             }
