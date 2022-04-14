@@ -41,15 +41,14 @@ fn par_check(length: usize, expected: usize) {
     }
 }
 
-#[derive(PartialEq, Debug)]
-pub struct MelodicNote {}
-
 fn parse_unwrap(s: &str) -> i64 {
     match s.parse::<i64>() {
         Ok(val) => val,
         Err(e) => panic!("Failed parsing note: {e}"),
     }
 }
+
+pub struct MelodicNote {}
 
 impl MakeNote for MelodicNote {
     fn make_note(s: &str, pars: Vec<f64>) -> crate::instruments::Note {

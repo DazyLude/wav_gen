@@ -4,6 +4,7 @@ use crate::track;
 pub enum InstrumentList {
     None,
     SineWave,
+    SimpleDrum,
 }
 // Note is a struct that contains data about >>>main<<< frequency of a sound,
 // it's length and when it starts. Different instruments will produce different soundwaves.
@@ -83,12 +84,10 @@ pub trait Instrument {
 // Just a sinewave
 pub struct SineWave {
     freq_mod: f64,
+    volume: f64,
 }
 
 impl SineWave {
-    pub fn new() -> SineWave {
-        SineWave { freq_mod: 1.0 }
-    }
     pub fn gen_sine_wave_from_x0(
         freq: f64,
         t0: f64,
@@ -119,15 +118,24 @@ impl SineWave {
 }
 
 impl Instrument for SineWave {
-    fn new() -> Self {
-        SineWave { freq_mod: 1.0 }
+    fn new() -> SineWave {
+        SineWave {
+            freq_mod: 1.0,
+            volume: 1.0,
+        }
     }
     fn update(&mut self, param: &(String, String)) -> Result<(), &'static str> {
         match param.0.as_str() {
             "freq_mod" => {
                 self.freq_mod = match param.1.parse::<f64>() {
                     Ok(val) => val,
-                    Err(_) => return Err("failed parsing str to f64"),
+                    Err(_) => return Err("failed parsing str to f64 in freq_mod"),
+                }
+            }
+            "volume" => {
+                self.volume = match param.1.parse::<f64>() {
+                    Ok(val) => val,
+                    Err(_) => return Err("failed parsing str to f64 in volume"),
                 }
             }
             _ => return Err("setting an unexisting parameter"),
@@ -141,25 +149,115 @@ impl Instrument for SineWave {
             for note in part {
                 let x0 = temp_track.get_value_at_t(note.time);
                 let x_deriv = temp_track.get_deriv_at_t(note.time);
-                temp_track = temp_track.mix(&mut track::Track {
+                let note_track = &mut track::Track {
                     track: SineWave::gen_sine_wave_from_x0(
                         note.freq * self.freq_mod,
                         note.time,
                         note.leng + note.time,
                         x0,
                         x_deriv,
-                        note.loud,
+                        note.loud * self.volume,
                     ),
                     starting_sample_index: (note.time * track::DESIRED_SAMPLE_RATE as f64) as usize,
                     loudness: 1.,
-                });
+                };
+                note_track.fade_out_mask(0.2, track::FadeMode::Exponential);
+                note_track.fade_in_mask(0.2, track::FadeMode::Exponential);
+                temp_track = temp_track.mix(note_track);
             }
         }
         temp_track
     }
 }
 
-// Smooth Sine: sine with fade-ins and fade-outs
-pub struct SmoothSine {
-    fademode: track::FadeMode,
+pub struct SimpleDrum {
+    volume: f64,
+    clickiness: f64,
+    freq_mod: f64,
+}
+
+impl SimpleDrum {
+    pub fn gen_plain_drum(base_freq: f64, t: f64, width: f64, loud: f64) -> Vec<f64> {
+        // if t - width < 0.0 {
+        //     panic!("can't insert drum sound at {}", t - width)
+        // }
+        let mut freq_list: [f64; 101] = [0.; 101];
+        for i in 0..101 {
+            // i - 50 / 100 is cool
+            // just i is a bit curser
+            freq_list[i] = base_freq * 2. * std::f64::consts::PI * (50. - i as f64 / 1000.);
+        }
+        let t0 = t - width;
+        let t1 = t + width;
+
+        let mut target_vector: Vec<f64> = Vec::new();
+        let times = math::linspace_from_n(
+            t0,
+            t1,
+            ((t1 - t0) * track::DESIRED_SAMPLE_RATE as f64) as i64 + 1,
+        );
+        for i in times {
+            let mut temp_val = 0.0_f64;
+            for freq in freq_list {
+                temp_val = temp_val + (loud * (freq * (i - t0)).sin()) as f64;
+            }
+            target_vector.push(temp_val);
+        }
+        target_vector
+    }
+}
+impl Instrument for SimpleDrum {
+    fn new() -> SimpleDrum {
+        SimpleDrum {
+            volume: 1.,
+            clickiness: 0.2,
+            freq_mod: 1.,
+        }
+    }
+    fn update(&mut self, param: &(String, String)) -> Result<(), &'static str> {
+        match param.0.as_str() {
+            "freq_mod" => {
+                self.freq_mod = match param.1.parse::<f64>() {
+                    Ok(val) => val,
+                    Err(_) => return Err("failed parsing str to f64 in freq_mod"),
+                }
+            }
+            "volume" => {
+                self.volume = match param.1.parse::<f64>() {
+                    Ok(val) => val,
+                    Err(_) => return Err("failed parsing str to f64 in volume"),
+                }
+            }
+            "clickiness" => {
+                self.volume = match param.1.parse::<f64>() {
+                    Ok(val) => val,
+                    Err(_) => return Err("failed parsing str to f64 in clickiness"),
+                }
+            }
+            _ => return Err("setting an unexisting parameter"),
+        }
+        return Ok(());
+    }
+    fn track_from_notes(self, part: &Vec<Note>) -> track::Track {
+        let mut temp_track: track::Track = track::Track::new();
+        if !part.is_empty() {
+            for note in part {
+                let note_track = &mut track::Track {
+                    track: SimpleDrum::gen_plain_drum(
+                        note.freq * self.freq_mod,
+                        note.time,
+                        self.clickiness,
+                        note.loud * self.volume,
+                    ),
+                    starting_sample_index: ((note.time - self.clickiness)
+                        * track::DESIRED_SAMPLE_RATE as f64)
+                        as usize,
+                    loudness: 1.,
+                };
+                // note_track.bell_mask(note.time, self.clickiness);
+                temp_track = temp_track.mix(note_track);
+            }
+        }
+        temp_track
+    }
 }

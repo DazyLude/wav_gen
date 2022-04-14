@@ -6,4 +6,3 @@ fn main() {
     // std::env::args();
     director(&OsString::from("examples/example_melody.wavg")).unwrap();
 }
-// у меня мейн аккуратненький, инвалид, ничего не делает, все по канонам

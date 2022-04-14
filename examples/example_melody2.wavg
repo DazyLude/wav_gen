@@ -1,0 +1,73 @@
+# This is wav_gen notesheet text file.
+# Lines marked by '#' character are commentaries and are skipped when parsing the file
+# Each file starts with config line for this notesheet which looks as follows
+Name: Example, BPM: 60, Time_Signature: 2/4, samplerate: 16000
+# Entries are separated by commas. Spaces are not mandatory.
+# Undeclared parametres are set at default values. Entry names are case insensitive
+# Then go the notesheets for the instruments. First comes the name of the instrument
+Notesheet: SineWave, freq_mod: 1.
+# This is followed by the notes in the following format
+1, g4 0 1/4, e4 1/4 1/8, e4 3/8 1/8
+2, g4 0 1/4, e4 1/4 1/8, e4 3/8 1/8
+3, g4 0 1/8, f4 1/8 1/8, e4 2/8 1/8, d4 3/8 1/8
+4, c4 0 1/2
+5, a4 0 1/4, c5 1/4 1/8, a4 3/8 1/8
+6, g4 0 1/4, e4 1/4 1/8, e4 3/8 1/8
+7, g4 0 1/8, f4 1/8 1/8, e4 2/8 1/8, d4 3/8 1/8
+8, c4 0 1/2
+9, a4 0 1/4, c5 1/4 1/8, a4 3/8 1/8
+10, g4 0 1/4, e4 1/4 1/8, e4 3/8 1/8
+11, g4 0 1/8, f4 1/8 1/8, e4 2/8 1/8, d4 3/8 1/8
+12, c4 0 1/2
+record
+
+Notesheet: SineWave, freq_mod: .5, volume: 0.5
+1, g4 0 1/4, e4 1/4 1/8, e4 3/8 1/8
+2, g4 0 1/4, e4 1/4 1/8, e4 3/8 1/8
+3, g4 0 1/8, f4 1/8 1/8, e4 2/8 1/8, d4 3/8 1/8
+4, c4 0 1/2
+5, a4 0 1/4, c5 1/4 1/8, a4 3/8 1/8
+6, g4 0 1/4, e4 1/4 1/8, e4 3/8 1/8
+7, g4 0 1/8, f4 1/8 1/8, e4 2/8 1/8, d4 3/8 1/8
+8, c4 0 1/2
+9, a4 0 1/4, c5 1/4 1/8, a4 3/8 1/8
+10, g4 0 1/4, e4 1/4 1/8, e4 3/8 1/8
+11, g4 0 1/8, f4 1/8 1/8, e4 2/8 1/8, d4 3/8 1/8
+12, c4 0 1/2
+record
+
+Notesheet: SineWave, freq_mod: .25, volume: 0.1
+1, g4 0 1/4, e4 1/4 1/8, e4 3/8 1/8
+2, g4 0 1/4, e4 1/4 1/8, e4 3/8 1/8
+3, g4 0 1/8, f4 1/8 1/8, e4 2/8 1/8, d4 3/8 1/8
+4, c4 0 1/2
+5, a4 0 1/4, c5 1/4 1/8, a4 3/8 1/8
+6, g4 0 1/4, e4 1/4 1/8, e4 3/8 1/8
+7, g4 0 1/8, f4 1/8 1/8, e4 2/8 1/8, d4 3/8 1/8
+8, c4 0 1/2
+9, a4 0 1/4, c5 1/4 1/8, a4 3/8 1/8
+10, g4 0 1/4, e4 1/4 1/8, e4 3/8 1/8
+11, g4 0 1/8, f4 1/8 1/8, e4 2/8 1/8, d4 3/8 1/8
+12, c4 0 1/2
+record
+
+Notesheet: SineWave, freq_mod: 2., volume: 0.15
+1, g4 0 1/4, e4 1/4 1/8, e4 3/8 1/8
+2, g4 0 1/4, e4 1/4 1/8, e4 3/8 1/8
+3, g4 0 1/8, f4 1/8 1/8, e4 2/8 1/8, d4 3/8 1/8
+4, c4 0 1/2
+5, a4 0 1/4, c5 1/4 1/8, a4 3/8 1/8
+6, g4 0 1/4, e4 1/4 1/8, e4 3/8 1/8
+7, g4 0 1/8, f4 1/8 1/8, e4 2/8 1/8, d4 3/8 1/8
+8, c4 0 1/2
+9, a4 0 1/4, c5 1/4 1/8, a4 3/8 1/8
+10, g4 0 1/4, e4 1/4 1/8, e4 3/8 1/8
+11, g4 0 1/8, f4 1/8 1/8, e4 2/8 1/8, d4 3/8 1/8
+12, c4 0 1/2
+record
+# Each line is a bar, and it contains notes, separated by comma symbols
+# Each note comes with name of the note and it's octave
+# followed by variant
+# followed by time passed since the beginning of the bar
+# followed by the length of this note
+end

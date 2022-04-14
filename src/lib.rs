@@ -57,6 +57,7 @@ pub fn director(wavg_filename: &OsString) -> std::io::Result<()> {
             InstrumentList::None => panic!(
                 "wavg synthax error: parsing notes before defining an instrument at line {counter}"),
             InstrumentList::SineWave => harmonics::NoteType::MelodicNote,
+            InstrumentList::SimpleDrum => harmonics::NoteType::MelodicNote,
         }
     }
 
@@ -88,7 +89,9 @@ pub fn director(wavg_filename: &OsString) -> std::io::Result<()> {
                             InstrumentList::None => 
                                 panic!("wavg synthax error: parsing notes before defining an instrument at line {counter}"),
                             InstrumentList::SineWave => 
-                                track = track.mix(&mut record::<instruments::SineWave>(&player_pars, &notes, counter)),  
+                                track = track.mix(&mut record::<instruments::SineWave>(&player_pars, &notes, counter)),
+                            InstrumentList::SimpleDrum => 
+                                track = track.mix(&mut record::<instruments::SimpleDrum>(&player_pars, &notes, counter)),    
                         }
                         notes = Vec::new();
                     }
@@ -132,6 +135,7 @@ pub fn director(wavg_filename: &OsString) -> std::io::Result<()> {
                         match line.get(first_colon + 1..first_comma).unwrap().trim() 
                         {
                             "sinewave" => player = InstrumentList::SineWave,
+                            "simpledrum" => player = InstrumentList::SimpleDrum,
                             _ => panic!("wavg synthax error: instrument not found; line {counter}"),
                         }
 
@@ -152,7 +156,7 @@ pub fn director(wavg_filename: &OsString) -> std::io::Result<()> {
             }
         }
     }
-
+    track.start_with_silence();
     track.normalize();
     track.apply_loudness();
 
@@ -186,8 +190,6 @@ struct GlobalParameters {
     bits_per_sample: u16,
     beats_per_minute: f64,
     time_signature: (i64, i64),
-    fade_mode: track::FadeMode,
-    fade_time: (i64, i64),
 }
 
 impl GlobalParameters {
@@ -198,11 +200,9 @@ impl GlobalParameters {
             bits_per_sample: 16,
             beats_per_minute: 120.,
             time_signature: (4, 4),
-            fade_mode: track::FadeMode::Linear,
-            fade_time: (1, 32),
         }
     }
-    // столько мучений, чтобы 3 повтора по 4 строки -> 3 повтора по 1 я доволен
+
     fn generate_wav_file<T: WaveData> (&self, datatrack: &track::Track) {
         let mut data = T::new();
         data.generate_from_wave(&datatrack.track, self.sample_rate);
@@ -221,31 +221,6 @@ impl GlobalParameters {
             "time_signature" => {
                 let fraction: Vec<i64> = param.1.trim().split('/').map(|s| s.parse::<i64>().unwrap()).collect();
                 self.time_signature = (fraction[0], fraction[1]);
-            }
-            "fademode" => {
-                self.fade_mode = match param.1.trim().to_ascii_lowercase().as_str() {
-                    "linear" => track::FadeMode::Linear,
-                    _ => return Err(&param.1),
-                }
-            }
-            "fadetime" => {
-                let slash_position = param.1.find('/').unwrap();
-                self.fade_time = (
-                    param
-                        .1
-                        .get(..slash_position)
-                        .unwrap()
-                        .trim()
-                        .parse::<i64>()
-                        .unwrap(),
-                    param
-                        .1
-                        .get(slash_position + 1..)
-                        .unwrap()
-                        .trim()
-                        .parse::<i64>()
-                        .unwrap(),
-                );
             }
             _ => {
                 return Err(param.0.as_str());

@@ -52,6 +52,7 @@ impl From<Track> for Vec<(f64, f64)> {
 
 pub enum FadeMode {
     Linear,
+    Exponential,
 }
 
 impl Track {
@@ -72,10 +73,9 @@ impl Track {
     pub fn ending_sample_index(&self) -> usize {
         self.track.len() + self.starting_sample_index
     }
-    pub fn fill_with_silence(&mut self, t: f64) {
-        for _i in 0..(t * DESIRED_SAMPLE_RATE as f64).trunc() as i64 {
-            self.track.push(0.);
-        }
+    pub fn start_with_silence(&mut self) {
+        let beginning = vec![0.; self.starting_sample_index];
+        self.track = [beginning, self.track.clone()].concat();
     }
     pub fn sample_in_global(&self, i: usize) -> f64 {
         if i > self.starting_sample_index && i - self.starting_sample_index < self.track.len() {
@@ -112,6 +112,7 @@ impl Track {
         }
         self.track[sampling_sample - 1]
     }
+
     pub fn mix(&mut self, another: &mut Track) -> Track {
         //true values represent self partially covering another and self starting earlier
         let mix_starting_sample_index = self
@@ -136,6 +137,17 @@ impl Track {
         }
     }
 
+    pub fn cut(&mut self, t0: f64, t1: f64) {
+        let t0_sample = (DESIRED_SAMPLE_RATE as f64 * t0).trunc() as usize;
+        let t1_sample = (DESIRED_SAMPLE_RATE as f64 * t1).trunc() as usize;
+        let mut temp_track: Vec<f64> = Vec::new();
+        for i in t0_sample..t1_sample {
+            temp_track.push(self.sample_in_global(i));
+        }
+        self.track = temp_track;
+        self.starting_sample_index = t0_sample;
+    }
+
     // makes everything to be within [-1; 1] range
     pub fn normalize(&mut self) {
         let mut max_amp: f64 = 0.;
@@ -153,6 +165,20 @@ impl Track {
         }
     }
 
+    pub fn bell_mask(&mut self, middle: f64, sigma: f64) {
+        if middle <= 0.0 && sigma <= 0.0 {
+            panic!("trying to apply bell mask with sigma: {sigma} and middle: {middle}");
+        }
+        let middle_sample = DESIRED_SAMPLE_RATE as f64 * middle;
+        let width_in_samples = DESIRED_SAMPLE_RATE as f64 * sigma;
+        for i in 0..self.track.len() {
+            self.track[i] *= (-0.5 * ((i as f64 - middle_sample) / width_in_samples).powi(2)).exp()
+        }
+        self.cut(middle - sigma, middle + sigma);
+        self.fade_in_mask(sigma / 2., FadeMode::Linear);
+        self.fade_out_mask(sigma / 2., FadeMode::Linear);
+    }
+
     pub fn fade_out_mask(&mut self, fadeout_length: f64, mode: FadeMode) {
         let len = self.track.len();
         let mut i = len - 1;
@@ -161,9 +187,15 @@ impl Track {
             match mode {
                 FadeMode::Linear => {
                     self.track[i] *= (len - i) as f64 / fadeout_samples as f64;
-                    i -= 1;
+                }
+                FadeMode::Exponential => {
+                    self.track[i] *= 2.
+                        - (2.0_f64.ln() * (i + fadeout_samples - len) as f64
+                            / fadeout_samples as f64)
+                            .exp()
                 }
             }
+            i -= 1;
         }
     }
     pub fn fade_in_mask(&mut self, fadein_length: f64, mode: FadeMode) {
@@ -173,9 +205,13 @@ impl Track {
             match mode {
                 FadeMode::Linear => {
                     self.track[i] *= i as f64 / fadein_samples as f64;
-                    i += 1;
+                }
+                FadeMode::Exponential => {
+                    self.track[i] *= 2.
+                        - (2.0_f64.ln() * (fadein_samples - i) as f64 / fadein_samples as f64).exp()
                 }
             }
+            i += 1;
         }
     }
 }
