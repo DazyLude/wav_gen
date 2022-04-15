@@ -1,10 +1,10 @@
 use crate::math;
-use crate::track;
+use crate::track::Track;
 
 pub enum InstrumentList {
     None,
     SineWave,
-    SimpleDrum,
+    Xylophone,
 }
 // Note is a struct that contains data about >>>main<<< frequency of a sound,
 // it's length and when it starts. Different instruments will produce different soundwaves.
@@ -40,6 +40,8 @@ impl Note {
     pub fn next(&self, freq: f64, leng: f64) -> Note {
         Note::new(freq, leng, self.time + self.leng)
     }
+    // left here for hystorical reasons
+    // that's how notes look without harmonics module
     pub fn default_track() -> Vec<Note> {
         let first: Note = Note::new(440. * (-3.0_f64 / 4.0_f64).exp2(), 1., 0.5);
         let second = first.next(440. * (-1.0_f64 / 3.0_f64).exp2(), 1.);
@@ -76,45 +78,24 @@ pub trait Instrument {
         }
         return Ok(successes);
     }
+    fn track_from_notes(&self, part: &Vec<Note>) -> Track {
+        let mut temp_track: Track = Track::new();
+        if !part.is_empty() {
+            for note in part {
+                temp_track = temp_track.mix(&mut self.single_note(note));
+            }
+        }
+        temp_track
+    }
     fn new() -> Self;
     fn update(&mut self, param: &(String, String)) -> Result<(), &'static str>;
-    fn track_from_notes(self, part: &Vec<Note>) -> track::Track;
+    fn single_note(&self, note: &Note) -> Track;
 }
 
 // Just a sinewave
 pub struct SineWave {
     freq_mod: f64,
     volume: f64,
-}
-
-impl SineWave {
-    pub fn gen_sine_wave_from_x0(
-        freq: f64,
-        t0: f64,
-        t1: f64,
-        x0: f64,
-        deriv: f64,
-        loud: f64,
-    ) -> Vec<f64> {
-        assert!(t0 < t1, "t0 ({t0}) should be less then t1 ({t1})");
-        let freq_r = freq * 2. * std::f64::consts::PI;
-        let phase_sign = (x0 - deriv).signum();
-        let phase_shift = if phase_sign > 0. {
-            (x0).asin()
-        } else {
-            std::f64::consts::PI - (x0).asin()
-        };
-        let mut target_vector: Vec<f64> = Vec::new();
-        let times = math::linspace_from_n(
-            t0,
-            t1,
-            ((t1 - t0) * track::DESIRED_SAMPLE_RATE as f64) as i64 + 1,
-        );
-        for i in times {
-            target_vector.push(loud * (phase_shift + freq_r * (i - t0)).sin());
-        }
-        target_vector
-    }
 }
 
 impl Instrument for SineWave {
@@ -143,72 +124,34 @@ impl Instrument for SineWave {
         return Ok(());
     }
 
-    fn track_from_notes(self, part: &Vec<Note>) -> track::Track {
-        let mut temp_track: track::Track = track::Track::new();
-        if !part.is_empty() {
-            for note in part {
-                let x0 = temp_track.get_value_at_t(note.time);
-                let x_deriv = temp_track.get_deriv_at_t(note.time);
-                let note_track = &mut track::Track {
-                    track: SineWave::gen_sine_wave_from_x0(
-                        note.freq * self.freq_mod,
-                        note.time,
-                        note.leng + note.time,
-                        x0,
-                        x_deriv,
-                        note.loud * self.volume,
-                    ),
-                    starting_sample_index: (note.time * track::DESIRED_SAMPLE_RATE as f64) as usize,
-                    loudness: 1.,
-                };
-                note_track.fade_out_mask(0.2, track::FadeMode::Exponential);
-                note_track.fade_in_mask(0.2, track::FadeMode::Exponential);
-                temp_track = temp_track.mix(note_track);
-            }
+    fn single_note(&self, note: &Note) -> Track {
+        let mut freq = note.freq * self.freq_mod;
+        // this truncates sine a bit so that it ends with 0
+        let length = ((note.leng - note.time) * 2.0 * freq).trunc() / 2.0 / freq;
+        freq *= 2.0 * std::f64::consts::PI;
+        let loud = note.loud * self.volume;
+        let mut target_vector: Vec<f64> = Vec::new();
+        let times = math::linspace_from_n(0., length, Track::time_to_sample_index(length));
+        for i in times {
+            target_vector.push(loud * (freq * i).sin());
         }
-        temp_track
+        Track {
+            track: target_vector,
+            starting_sample_index: Track::time_to_sample_index(note.time),
+            loudness: 1.,
+        }
     }
 }
 
-pub struct SimpleDrum {
+pub struct Xylophone {
     volume: f64,
     clickiness: f64,
     freq_mod: f64,
 }
 
-impl SimpleDrum {
-    pub fn gen_plain_drum(base_freq: f64, t: f64, width: f64, loud: f64) -> Vec<f64> {
-        // if t - width < 0.0 {
-        //     panic!("can't insert drum sound at {}", t - width)
-        // }
-        let mut freq_list: [f64; 101] = [0.; 101];
-        for i in 0..101 {
-            // i - 50 / 100 is cool
-            // just i is a bit curser
-            freq_list[i] = base_freq * 2. * std::f64::consts::PI * (50. - i as f64 / 1000.);
-        }
-        let t0 = t - width;
-        let t1 = t + width;
-
-        let mut target_vector: Vec<f64> = Vec::new();
-        let times = math::linspace_from_n(
-            t0,
-            t1,
-            ((t1 - t0) * track::DESIRED_SAMPLE_RATE as f64) as i64 + 1,
-        );
-        for i in times {
-            let mut temp_val = 0.0_f64;
-            for freq in freq_list {
-                temp_val = temp_val + (loud * (freq * (i - t0)).sin()) as f64;
-            }
-            target_vector.push(temp_val);
-        }
-        target_vector
-    }
-}
-impl Instrument for SimpleDrum {
-    fn new() -> SimpleDrum {
-        SimpleDrum {
+impl Instrument for Xylophone {
+    fn new() -> Xylophone {
+        Xylophone {
             volume: 1.,
             clickiness: 0.2,
             freq_mod: 1.,
@@ -238,26 +181,33 @@ impl Instrument for SimpleDrum {
         }
         return Ok(());
     }
-    fn track_from_notes(self, part: &Vec<Note>) -> track::Track {
-        let mut temp_track: track::Track = track::Track::new();
-        if !part.is_empty() {
-            for note in part {
-                let note_track = &mut track::Track {
-                    track: SimpleDrum::gen_plain_drum(
-                        note.freq * self.freq_mod,
-                        note.time,
-                        self.clickiness,
-                        note.loud * self.volume,
-                    ),
-                    starting_sample_index: ((note.time - self.clickiness)
-                        * track::DESIRED_SAMPLE_RATE as f64)
-                        as usize,
-                    loudness: 1.,
-                };
-                // note_track.bell_mask(note.time, self.clickiness);
-                temp_track = temp_track.mix(note_track);
-            }
+    fn single_note(&self, note: &Note) -> Track {
+        // if t - width < 0.0 {
+        //     panic!("can't insert drum sound at {}", t - width)
+        // }
+        let mut freq_list: [f64; 101] = [0.; 101];
+        for i in 0..101 {
+            // i - 50 / 100 is cool
+            // just i is a bit curser
+            freq_list[i] =
+                note.freq * self.freq_mod * 2. * std::f64::consts::PI * (50. - i as f64 / 1000.);
         }
-        temp_track
+        let t0 = note.time - self.clickiness;
+        let t1 = note.time + self.clickiness;
+
+        let mut target_vector: Vec<f64> = Vec::new();
+        let times = math::linspace_from_n(t0, t1, Track::time_to_sample_index(t1 - t0));
+        for i in times {
+            let mut temp_val = 0.0_f64;
+            for freq in freq_list {
+                temp_val = temp_val + ((freq * (i - t0)).sin()) as f64;
+            }
+            target_vector.push(temp_val * note.loud * self.volume);
+        }
+        Track {
+            track: target_vector,
+            starting_sample_index: Track::time_to_sample_index(t0),
+            loudness: 1.0,
+        }
     }
 }

@@ -57,7 +57,7 @@ pub fn director(wavg_filename: &OsString) -> std::io::Result<()> {
             InstrumentList::None => panic!(
                 "wavg synthax error: parsing notes before defining an instrument at line {counter}"),
             InstrumentList::SineWave => harmonics::NoteType::MelodicNote,
-            InstrumentList::SimpleDrum => harmonics::NoteType::MelodicNote,
+            InstrumentList::Xylophone => harmonics::NoteType::MelodicNote,
         }
     }
 
@@ -90,8 +90,8 @@ pub fn director(wavg_filename: &OsString) -> std::io::Result<()> {
                                 panic!("wavg synthax error: parsing notes before defining an instrument at line {counter}"),
                             InstrumentList::SineWave => 
                                 track = track.mix(&mut record::<instruments::SineWave>(&player_pars, &notes, counter)),
-                            InstrumentList::SimpleDrum => 
-                                track = track.mix(&mut record::<instruments::SimpleDrum>(&player_pars, &notes, counter)),    
+                            InstrumentList::Xylophone => 
+                                track = track.mix(&mut record::<instruments::Xylophone>(&player_pars, &notes, counter)),    
                         }
                         notes = Vec::new();
                     }
@@ -135,7 +135,7 @@ pub fn director(wavg_filename: &OsString) -> std::io::Result<()> {
                         match line.get(first_colon + 1..first_comma).unwrap().trim() 
                         {
                             "sinewave" => player = InstrumentList::SineWave,
-                            "simpledrum" => player = InstrumentList::SimpleDrum,
+                            "simpledrum" => player = InstrumentList::Xylophone,
                             _ => panic!("wavg synthax error: instrument not found; line {counter}"),
                         }
 

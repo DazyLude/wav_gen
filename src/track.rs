@@ -1,4 +1,4 @@
-pub const DESIRED_SAMPLE_RATE: u32 = 16000;
+pub const DESIRED_SAMPLE_RATE: u32 = 44100;
 
 pub struct Track {
     pub track: Vec<f64>,
@@ -50,11 +50,6 @@ impl From<Track> for Vec<(f64, f64)> {
     }
 }
 
-pub enum FadeMode {
-    Linear,
-    Exponential,
-}
-
 impl Track {
     pub fn new() -> Track {
         let track: Vec<f64> = Vec::new();
@@ -73,6 +68,14 @@ impl Track {
     pub fn ending_sample_index(&self) -> usize {
         self.track.len() + self.starting_sample_index
     }
+    /// returns an absolute sample index of a given abolute time, or an amount of samples in a given timeframe
+    pub fn time_to_sample_index(t0: f64) -> usize {
+        (t0 * DESIRED_SAMPLE_RATE as f64).trunc() as usize
+    }
+    pub fn sample_index_to_time(i: usize) -> f64 {
+        i as f64 / DESIRED_SAMPLE_RATE as f64
+    }
+
     pub fn start_with_silence(&mut self) {
         let beginning = vec![0.; self.starting_sample_index];
         self.track = [beginning, self.track.clone()].concat();
@@ -89,20 +92,6 @@ impl Track {
             return 0.;
         }
         let mut sampling_sample = (sample_time * DESIRED_SAMPLE_RATE as f64).floor() as usize;
-        if sampling_sample < self.starting_sample_index {
-            return 0.;
-        }
-        sampling_sample -= self.starting_sample_index;
-        if sampling_sample > self.track.len() {
-            return 0.;
-        }
-        self.track[sampling_sample - 1]
-    }
-    pub fn get_deriv_at_t(&self, sample_time: f64) -> f64 {
-        if self.track.len() == 0 {
-            return 0.;
-        }
-        let mut sampling_sample = (sample_time * DESIRED_SAMPLE_RATE as f64).floor() as usize - 1;
         if sampling_sample < self.starting_sample_index {
             return 0.;
         }
@@ -164,54 +153,43 @@ impl Track {
             *sample *= self.loudness;
         }
     }
+}
 
-    pub fn bell_mask(&mut self, middle: f64, sigma: f64) {
-        if middle <= 0.0 && sigma <= 0.0 {
-            panic!("trying to apply bell mask with sigma: {sigma} and middle: {middle}");
-        }
-        let middle_sample = DESIRED_SAMPLE_RATE as f64 * middle;
-        let width_in_samples = DESIRED_SAMPLE_RATE as f64 * sigma;
-        for i in 0..self.track.len() {
-            self.track[i] *= (-0.5 * ((i as f64 - middle_sample) / width_in_samples).powi(2)).exp()
-        }
-        self.cut(middle - sigma, middle + sigma);
-        self.fade_in_mask(sigma / 2., FadeMode::Linear);
-        self.fade_out_mask(sigma / 2., FadeMode::Linear);
-    }
+use std::default::Default;
 
-    pub fn fade_out_mask(&mut self, fadeout_length: f64, mode: FadeMode) {
-        let len = self.track.len();
-        let mut i = len - 1;
-        let fadeout_samples = (fadeout_length * DESIRED_SAMPLE_RATE as f64).floor() as usize;
-        while i > len - fadeout_samples {
-            match mode {
-                FadeMode::Linear => {
-                    self.track[i] *= (len - i) as f64 / fadeout_samples as f64;
-                }
-                FadeMode::Exponential => {
-                    self.track[i] *= 2.
-                        - (2.0_f64.ln() * (i + fadeout_samples - len) as f64
-                            / fadeout_samples as f64)
-                            .exp()
-                }
-            }
-            i -= 1;
+pub trait Mask: Default {
+    fn apply(self, track: &mut Track);
+}
+
+pub struct LinearFadeInOut {
+    length: f64,
+    is_out: bool,
+}
+
+impl Default for LinearFadeInOut {
+    fn default() -> LinearFadeInOut {
+        LinearFadeInOut {
+            length: 0.2,
+            is_out: true,
         }
     }
-    pub fn fade_in_mask(&mut self, fadein_length: f64, mode: FadeMode) {
-        let mut i = 0;
-        let fadein_samples = (fadein_length * DESIRED_SAMPLE_RATE as f64).floor() as usize;
-        while fadein_samples > i {
-            match mode {
-                FadeMode::Linear => {
-                    self.track[i] *= i as f64 / fadein_samples as f64;
-                }
-                FadeMode::Exponential => {
-                    self.track[i] *= 2.
-                        - (2.0_f64.ln() * (fadein_samples - i) as f64 / fadein_samples as f64).exp()
-                }
-            }
-            i += 1;
+}
+
+impl Mask for LinearFadeInOut {
+    fn apply(self, track: &mut Track) {
+        let (x0, x1): (f64, f64) = if self.is_out {
+            (track.t_end(), track.t_end() - self.length)
+        } else {
+            (0.0, self.length)
+        };
+        let linear = |x| -> f64 { (x - x0) / (x1 - x0) };
+        let (quiet_sample, loud_sample): (usize, usize) = (
+            Track::time_to_sample_index(x0),
+            Track::time_to_sample_index(x1),
+        );
+
+        for i in quiet_sample..loud_sample {
+            track.track[i] *= linear(Track::sample_index_to_time(i));
         }
     }
 }

@@ -14,54 +14,37 @@ pub fn linerp_from_sample_rate(
     old_sample_rate: u32,
     new_sample_rate: u32,
 ) -> Vec<f64> {
-    assert!(
-        old_sample_rate <= new_sample_rate,
-        "linerp_from_sample_rate works only if old_sample_rate ({old_sample_rate})
-         is less or equal than new_sample_rate ({new_sample_rate})"
-    );
     let mut new_y: Vec<f64> = Vec::new();
     let mut k: i64 = 0;
-    for i in 1..old_y.len() {
-        while (k * (old_sample_rate as i64)) < (i as i64 * (new_sample_rate as i64)) {
-            new_y.push(linerp(
-                ((i - 1) as f64 / old_sample_rate as f64, old_y[i - 1]),
-                (i as f64 / old_sample_rate as f64, old_y[i]),
-                k as f64 / new_sample_rate as f64,
-            ));
-            k += 1;
+
+    match old_sample_rate.cmp(&new_sample_rate) {
+        std::cmp::Ordering::Less => {
+            for i in 1..old_y.len() {
+                while (k * (old_sample_rate as i64)) < (i as i64 * (new_sample_rate as i64)) {
+                    new_y.push(linerp(
+                        ((i - 1) as f64 / old_sample_rate as f64, old_y[i - 1]),
+                        (i as f64 / old_sample_rate as f64, old_y[i]),
+                        k as f64 / new_sample_rate as f64,
+                    ));
+                    k += 1;
+                }
+            }
+        }
+        std::cmp::Ordering::Equal => return old_y,
+        std::cmp::Ordering::Greater => {
+            println!("trying to linerp data with sample rate = {old_sample_rate} to a smaller sample rate = {new_sample_rate}.");
+            todo!("this is not implemented yet");
         }
     }
     new_y
 }
 
-// creates a vector that contains points spaced evenly with interval 1 / points per unit
-pub fn _linspace(x0: f64, x1: f64, points_per_unit: f64) -> Vec<f64> {
-    assert!(
-        x0 < x1,
-        "Tried to create a linspace with x0 = {x0} and x1 = {x1}"
-    );
-    assert!(
-        points_per_unit > 0.,
-        "Tried to create linspace with {points_per_unit} points per unit"
-    );
-
-    let mut target_vector: Vec<f64> = Vec::new();
-    target_vector.push(x0);
-    let mut i = 1;
-    while target_vector[i - 1] < x1 {
-        target_vector.push(x0 + i as f64 / points_per_unit);
-        i += 1;
-    }
-    target_vector.pop();
-    target_vector
-}
 // creates a vector that contains N evenly spaced points between [x0 and x1]
-pub fn linspace_from_n(x0: f64, x1: f64, n: i64) -> Vec<f64> {
+pub fn linspace_from_n(x0: f64, x1: f64, n: usize) -> Vec<f64> {
     assert!(
         x1 > x0,
         "Tried to create a linspace with x0 = {x0} and x1 = {x1}"
     );
-    assert!(n > 1, "Tried to create linspace with n = {n} points");
 
     let mut vector: Vec<f64> = Vec::with_capacity(n as usize);
     let nf = (n - 1) as f64;
