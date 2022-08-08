@@ -59,9 +59,6 @@ impl Track {
             loudness: 1.,
         }
     }
-    pub fn t_end(&self) -> f64 {
-        (self.track.len() + self.starting_sample_index) as f64 / DESIRED_SAMPLE_RATE as f64
-    }
     pub fn length(&self) -> f64 {
         self.track.len() as f64 / DESIRED_SAMPLE_RATE as f64
     }
@@ -155,9 +152,7 @@ impl Track {
     }
 }
 
-use std::default::Default;
-
-pub trait Mask: Default {
+pub trait Mask {
     fn apply(self, track: &mut Track);
 }
 
@@ -166,10 +161,28 @@ pub struct LinearFadeInOut {
     is_out: bool,
 }
 
-impl Default for LinearFadeInOut {
-    fn default() -> LinearFadeInOut {
+impl LinearFadeInOut {
+    pub fn r#in() -> Self {
         LinearFadeInOut {
             length: 0.2,
+            is_out: false,
+        }
+    }
+    pub fn in_l(length: f64) -> Self {
+        LinearFadeInOut {
+            length: length,
+            is_out: false,
+        }
+    }
+    pub fn out() -> Self {
+        LinearFadeInOut {
+            length: 0.2,
+            is_out: true,
+        }
+    }
+    pub fn out_l(length: f64) -> Self {
+        LinearFadeInOut {
+            length: length,
             is_out: true,
         }
     }
@@ -178,18 +191,24 @@ impl Default for LinearFadeInOut {
 impl Mask for LinearFadeInOut {
     fn apply(self, track: &mut Track) {
         let (x0, x1): (f64, f64) = if self.is_out {
-            (track.t_end(), track.t_end() - self.length)
+            (track.length(), track.length() - self.length)
         } else {
             (0.0, self.length)
         };
-        let linear = |x| -> f64 { (x - x0) / (x1 - x0) };
         let (quiet_sample, loud_sample): (usize, usize) = (
             Track::time_to_sample_index(x0),
             Track::time_to_sample_index(x1),
         );
-
-        for i in quiet_sample..loud_sample {
-            track.track[i] *= linear(Track::sample_index_to_time(i));
+        let linear = |x_i| -> f64 {
+            (x_i as f64 - quiet_sample as f64) / (loud_sample as f64 - quiet_sample as f64)
+        };
+        let range = if (quiet_sample..loud_sample).is_empty() {
+            loud_sample..quiet_sample
+        } else {
+            quiet_sample..loud_sample
+        };
+        for i in range {
+            track.track[i] *= linear(i);
         }
     }
 }

@@ -1,5 +1,6 @@
 use crate::math;
-use crate::track::Track;
+use crate::track;
+use crate::track::{Mask, Track};
 
 pub enum InstrumentList {
     None,
@@ -127,7 +128,7 @@ impl Instrument for SineWave {
     fn single_note(&self, note: &Note) -> Track {
         let mut freq = note.freq * self.freq_mod;
         // this truncates sine a bit so that it ends with 0
-        let length = ((note.leng - note.time) * 2.0 * freq).trunc() / 2.0 / freq;
+        let length = ((note.leng) * 2.0 * freq).trunc() / 2.0 / freq;
         freq *= 2.0 * std::f64::consts::PI;
         let loud = note.loud * self.volume;
         let mut target_vector: Vec<f64> = Vec::new();
@@ -135,11 +136,14 @@ impl Instrument for SineWave {
         for i in times {
             target_vector.push(loud * (freq * i).sin());
         }
-        Track {
+        let mut note_track = Track {
             track: target_vector,
             starting_sample_index: Track::time_to_sample_index(note.time),
             loudness: 1.,
-        }
+        };
+        track::LinearFadeInOut::out_l(length / 100.).apply(&mut note_track);
+        track::LinearFadeInOut::in_l(length / 100.).apply(&mut note_track);
+        note_track
     }
 }
 
@@ -182,15 +186,12 @@ impl Instrument for Xylophone {
         return Ok(());
     }
     fn single_note(&self, note: &Note) -> Track {
-        // if t - width < 0.0 {
-        //     panic!("can't insert drum sound at {}", t - width)
-        // }
         let mut freq_list: [f64; 101] = [0.; 101];
         for i in 0..101 {
             // i - 50 / 100 is cool
             // just i is a bit curser
             freq_list[i] =
-                note.freq * self.freq_mod * 2. * std::f64::consts::PI * (50. - i as f64 / 1000.);
+                note.freq * self.freq_mod * 2. * std::f64::consts::PI * (1.02 - i as f64 / 250.);
         }
         let t0 = note.time - self.clickiness;
         let t1 = note.time + self.clickiness;
